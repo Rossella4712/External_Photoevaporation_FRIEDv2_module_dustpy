@@ -10,18 +10,8 @@ from astropy.table import Table, vstack
 #
 #####################################
 
-
-#def get_M500(Sigma_out, r_out):
-#    '''
-#    Transformed variable for the FRIED Grid.
-#    Receives r_out [au], and sigma_out  [g/cm^2].
-#    Returns a representative mass  [jupiter masses]
-#    '''
-#    return 2 * np.pi * Sigma_out * r_out * 500 * (c.au)**2 / c.M_jup
-
 def get_Sigma_1AU(Sigma_out, r_out):
     return Sigma_out*r_out
-
 
 def Set_FRIED_Interpolator(r_Table, Sigma1AU_Table, MassLoss_Table):
     '''
@@ -33,15 +23,13 @@ def Set_FRIED_Interpolator(r_Table, Sigma1AU_Table, MassLoss_Table):
     '''
     # Following Sellek et al.(2020) implementation, Sigma(1AU) is used to set the interpolator
     
-    #M500_Table = get_M500(Sigma_Table, r_Table)
     #Sigma_1AU_Table = get_Sigma_1AU(Sigma_Table, r_Table)
-    min_mass_loss = min(MassLoss_Table)
+    #min_mass_loss = min(MassLoss_Table)
 
     # Interpolation in the [log(Sigma1AU), log(r_out) -> log(MassLoss)] parameter space
-    Interpolator = LinearNDInterpolator(list(zip(np.log10(Sigma1AU_Table), np.log10(r_Table))), MassLoss_Table, fill_value=-13)
+    Interpolator = LinearNDInterpolator(list(zip(np.log10(Sigma1AU_Table), np.log10(r_Table))), MassLoss_Table, fill_value=-12.5)
 
     # Return a Lambda function that converts the linear Sigma1AU,r inputs to the logspace to perform the interpolation.
-
     return lambda S1AU, r: Interpolator(np.log10(S1AU), np.log10(r))
 
 
@@ -63,7 +51,7 @@ def get_MassLoss_SellekGrid(r_grid, Sigma_grid, r_Table, Sigma1AU_Table, MassLos
     ----------------------------------------
     '''
 
-    # Obtain the FRIED interpolator function that returns the Mass loss, given a (M400, r) input
+    # Obtain the FRIED interpolator function that returns the Mass loss, given a (Sigma1AU, r) input
     FRIED_Interpolator = Set_FRIED_Interpolator(r_Table, Sigma1AU_Table, MassLoss_Table)
 
     # Find out the shape of the table in the r_Table parameter range
@@ -71,34 +59,30 @@ def get_MassLoss_SellekGrid(r_grid, Sigma_grid, r_Table, Sigma1AU_Table, MassLos
 
     # Obtain the values of r_Table, and the corresponding minimum and maximum value of Sigma in the Fried grid for each r_Table
     r_Table = r_Table.reshape(shape_FRIED)[0]                           # Dimension: unique(Table.r_Table)
-    Sigma_max = 1.e5 * (r_Table**(-1))
+    
+    Sigma_max = 1e5 * (r_Table**(-1))
     Sigma_min = r_Table**(-1)
-    #Sigma_max = np.max(Sigma_Table.reshape(shape_FRIED), axis= 0)     # Dimension: unique(Table.r_Table)
-    #Sigma_min = np.min(Sigma_Table.reshape(shape_FRIED), axis= 0)     # Dimension: unique(Table.r_Table)
-
+    
     # Give a buffer factor, since the FRIED interpolator should not extrapolate outside the original
     buffer_max = 0.9 # buffer for the Sigma upper grid limit
     buffer_min = 1.1 # buffer for the Sigma lower grid limit
 
     # The interpolation of the grid limits is performed on the logarithmic space
     # See the FRIED grid (r_Table vs. Sigma) data distribution for reference
-    f_Sigma_FRIED_max = lambda r_interp: 10**interp1d(np.log10(r_Table), np.log10(buffer_max * Sigma_max), kind='linear', fill_value = 'extrapolate')(np.log10(r_interp))
-    f_Sigma_FRIED_min = lambda r_interp: 10**interp1d(np.log10(r_Table), np.log10(buffer_min * Sigma_min), kind='linear', fill_value = 'extrapolate')(np.log10(r_interp))
+    f_Sigma_FRIED_max = lambda r_interp: 10**np.interp( np.log10(r_interp),np.log10(r_Table), np.log10(buffer_max * Sigma_max) )  
+    f_Sigma_FRIED_min = lambda r_interp: 10**np.interp( np.log10(r_interp),np.log10(r_Table), np.log10(buffer_min * Sigma_min) ) 
 
 
     # Calculate the density limits and the corresponding mass loss rates for the custom radial grid
     Sigma_max = f_Sigma_FRIED_max(r_grid)
     Sigma_min = f_Sigma_FRIED_min(r_grid)
+    
+    
+    #S1AU_max = get_Sigma_1AU(Sigma_max, r_grid)
+    #S1AU_min = get_Sigma_1AU(Sigma_min, r_grid)
 
-
-    #sigma limits friedv2:
-    #Sigma_max = 1.e5 * (r_grid**(-1))
-    #Sigma_min = r_grid**(-1)
-    S1AU_max = get_Sigma_1AU(Sigma_max, r_grid)
-    S1AU_min = get_Sigma_1AU(Sigma_min, r_grid)
-
-    MassLoss_max = FRIED_Interpolator(S1AU_max, r_grid)  # Upper limit of the mass loss rate from the fried grid
-    MassLoss_min = FRIED_Interpolator(S1AU_min, r_grid)  # Lower limit of the mass loss rate from the fried grid
+    #MassLoss_max = FRIED_Interpolator(S1AU_max, r_grid)  # Upper limit of the mass loss rate from the fried grid
+    #MassLoss_min = FRIED_Interpolator(S1AU_min, r_grid)  # Lower limit of the mass loss rate from the fried grid
 
     # Mask the regions where the custom Sigma grid is outside the FRIED boundaries
     mask_max= Sigma_grid >= Sigma_max
@@ -106,23 +90,31 @@ def get_MassLoss_SellekGrid(r_grid, Sigma_grid, r_Table, Sigma1AU_Table, MassLos
 
     # Calculate the mass loss rate for each grid cell according to the FRIED grid
     # Note that the mass loss rate is in logarithmic-10 space
-    S1AU_grid = get_Sigma_1AU(Sigma_grid, r_grid)
+    #S1AU_grid = get_Sigma_1AU(Sigma_grid, r_grid)
+
+    
+    re_Sigma = np.minimum(Sigma_grid, Sigma_max)
+    re_Sigma = np.maximum(re_Sigma, Sigma_min)
+    S1AU_grid = get_Sigma_1AU(re_Sigma, r_grid)
+
 
     MassLoss_SellekGrid = FRIED_Interpolator(S1AU_grid, r_grid) # Mass loss rate from the FRIED grid
     #MassLoss_SellekGrid[r_grid<5] = -13
 
     mask_out = r_grid>=450.
+    min_mass_loss = min(MassLoss_Table)
     #i_rmax = np.where( r_grid>=450. )[0][0]
 
     MassLoss_SellekGrid[mask_out] = MassLoss_SellekGrid[mask_out][0]
 
-    ot_regime = mask_min * (MassLoss_SellekGrid > -13)
+    ot_regime = mask_min * (MassLoss_SellekGrid > min_mass_loss)
 
-    MassLoss_SellekGrid[mask_max] = MassLoss_max[mask_max]
-    MassLoss_SellekGrid[ot_regime] = MassLoss_min[ot_regime] + np.log10(Sigma_grid / Sigma_min)[ot_regime]
+    #MassLoss_SellekGrid[mask_max] = MassLoss_max[mask_max]
+    MassLoss_SellekGrid[ot_regime] = MassLoss_SellekGrid[ot_regime] + np.log10(Sigma_grid / Sigma_min)[ot_regime] #MassLoss_min[ot_regime] + np.log10(Sigma_grid / Sigma_min)[ot_regime]
     #MassLoss_SellekGrid[MassLoss_SellekGrid < -13] = -13
 
     return MassLoss_SellekGrid, Sigma_min, Sigma_max
+
 
 def get_mask_StarUV(Mstar_value, UV_value, Mstar_Table, UV_Table):
     '''
