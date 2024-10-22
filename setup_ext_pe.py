@@ -11,7 +11,7 @@ from functions_ext_pe import SigmaDot_ExtPhoto, SigmaDot_ExtPhoto_Dust
 # Helper routine to add external photoevaporation to your Simulation object in one line.
 ################################################################################################
 
-def setup_externalPhotoevaporation_FRIED(sim, fried_filenames = ["./FRIEDV2_0p1Msol_fPAH1p0_growth.dat", "FRIEDV2_0p3Msol_fPAH1p0_growth.dat", "FRIEDV2_0p6Msol_fPAH1p0_growth.dat", "FRIEDV2_1p0Msol_fPAH1p0_growth.dat", "FRIEDV2_1p5Msol_fPAH1p0_growth.dat", "FRIEDV2_3p0Msol_fPAH1p0_growth.dat"], UV_Flux = 1000.,
+def setup_ext_pe_FRIED(sim, fried_filenames = ["./FRIEDV2_0p1Msol_fPAH1p0_growth.dat", "FRIEDV2_0p3Msol_fPAH1p0_growth.dat", "FRIEDV2_0p6Msol_fPAH1p0_growth.dat", "FRIEDV2_1p0Msol_fPAH1p0_growth.dat", "FRIEDV2_1p5Msol_fPAH1p0_growth.dat", "FRIEDV2_3p0Msol_fPAH1p0_growth.dat"], UV_Flux = 1000.,
                                             SigmaFloor = 1.e-1000):
     '''
     Add external photoevaporation using the FRIED grid (Haworth et al., 2018) and the Sellek et al.(2020) implementation.
@@ -51,32 +51,29 @@ def setup_externalPhotoevaporation_FRIED(sim, fried_filenames = ["./FRIEDV2_0p1M
                                                                             Mstar_target= sim.star.M[0]/c.M_sun, UV_target= UV_Flux,
                                                                             grid_radii= grid_radii, grid_Sigma= grid_Sigma, grid_Sigma1AU = grid_Sigma1AU)
 
-
-    sim.addgroup('FRIED', description = "FRIED grid used to calculate mass loss rates due to external photoevaporation")
-    sim.FRIED.addgroup('Table', description = "(Resampled) Table of the mass loss rates for a given radial-Sigma grid.")
-    sim.FRIED.Table.addfield("radii", grid_radii, description ="Outer disk radius input to calculate FRIED mass loss rates [AU], (array, nr)")
-    sim.FRIED.Table.addfield("Sigma", grid_Sigma, description = "Surface density grid to calculate FRIED mass loss rates [g/cm^2] (array, nSigma)")
-    sim.FRIED.Table.addfield("MassLoss", grid_MassLoss, description = "FRIED Mass loss rates [log10 (M_sun/year)] (grid, nr*nSigma)")
-
-
+    sim.addgroup('ext_pe', description = "external photoevaporation")
+    sim.ext_pe.addgroup('FRIED', description = "FRIED grid used to calculate mass loss rates due to external photoevaporation")
+    sim.ext_pe.FRIED.addgroup('Table', description = "(Resampled) Table of the mass loss rates for a given radial-Sigma grid.")
+    sim.ext_pe.FRIED.Table.addfield("radii", grid_radii, description ="Outer disk radius input to calculate FRIED mass loss rates [AU], (array, nr)")
+    sim.ext_pe.FRIED.Table.addfield("Sigma", grid_Sigma, description = "Surface density grid to calculate FRIED mass loss rates [g/cm^2] (array, nSigma)")
+    sim.ext_pe.FRIED.Table.addfield("MassLoss", grid_MassLoss, description = "FRIED Mass loss rates [log10 (M_sun/year)] (grid, nr*nSigma)")
 
     # We use this hidden _Interpolator function to avoid constructing the FRIED interpolator multiple times
-    sim.FRIED._Interpolator = grid_MassLoss_Interpolator
-
-
+    sim.ext_pe.FRIED._Interpolator = grid_MassLoss_Interpolator
+    
     # Add the truncation radius
-    sim.FRIED.addfield('rTrunc', sim.grid.r[-1], description = 'Truncation radius [cm]')
-    sim.FRIED.addfield('rLim_in', sim.grid.r[-1], description = 'Radius enclosing 0.9 disc mass [cm]')
+    sim.ext_pe.FRIED.addfield('rTrunc', sim.grid.r[-1], description = 'Truncation radius [cm]')
+    sim.ext_pe.FRIED.addfield('rLim_in', sim.grid.r[-1], description = 'Radius enclosing 0.9 disc mass [cm]')
 
     # Add the Mass Loss Rate field from the FRIED Grid
-    sim.FRIED.addfield('MassLoss', np.zeros_like(sim.grid.r), description = 'Mass loss rate obtained by interpolating the FRIED Table at each grid cell [g/s]')
+    sim.ext_pe.FRIED.addfield('MassLoss', np.zeros_like(sim.grid.r), description = 'Mass loss rate obtained by interpolating the FRIED Table at each grid cell [g/s]')
 
 
-    sim.FRIED.rLim_in.updater = LimitInRadius
-    sim.FRIED.rTrunc.updater = TruncationRadius
-    sim.FRIED.MassLoss.updater =  MassLoss_FRIED
+    sim.ext_pe.FRIED.rLim_in.updater = LimitInRadius
+    sim.ext_pe.FRIED.rTrunc.updater = TruncationRadius
+    sim.ext_pe.FRIED.MassLoss.updater =  MassLoss_FRIED
     sim.updater = ['star', 'grid', 'FRIED', 'gas', 'dust']
-    sim.FRIED.updater = ['rLim_in','rTrunc' ,'MassLoss']
+    sim.ext_pe.FRIED.updater = ['rLim_in','rTrunc' ,'MassLoss']
 
 
     ###############################
@@ -110,25 +107,3 @@ def setup_externalPhotoevaporation_FRIED(sim, fried_filenames = ["./FRIEDV2_0p1M
     sim.gas.SigmaFloor = SigmaFloor
     
     sim.update()
-    
-################################################################################################
-# Helper routine to remove dust evolution and run a gas-only simulation
-################################################################################################
-
-def setup_gasonly(sim):
-    '''
-    This routine deactivates all dust evolution source terms and integration instructions.
-    Call it after setting up everything else in the simulation.
-    '''
-    sim.dust.S.coag[...] = 0.
-    sim.dust.S.coag.updater = None
-    sim.dust.S.ext[...] = 0.
-    sim.dust.S.ext.updater = None
-    sim.dust.S.hyd[...] = 0.
-    sim.dust.S.hyd.updater = None
-    sim.dust.S.tot[...] = 0.
-    sim.dust.S.tot.updater = None
-    sim.dust.S.updater = None
-    sim.update()
-
-    del(sim.integrator.instructions[0])
