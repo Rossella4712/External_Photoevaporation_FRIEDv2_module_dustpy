@@ -1,6 +1,6 @@
 import numpy as np
 from dustpy import constants as c
-from scipy.interpolate import interp1d, LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator
 from astropy.table import Table, vstack
 
 
@@ -31,7 +31,6 @@ def Set_FRIED_Interpolator(r_Table, Sigma1AU_Table, MassLoss_Table):
 
     # Return a Lambda function that converts the linear Sigma1AU,r inputs to the logspace to perform the interpolation.
     return lambda S1AU, r: Interpolator(np.log10(S1AU), np.log10(r))
-
 
 #####################################
 # FRIED GRID ROUTINES - CALLED ONLY ON SETUP
@@ -115,7 +114,6 @@ def get_MassLoss_SellekGrid(r_grid, Sigma_grid, r_Table, Sigma1AU_Table, MassLos
 
     return MassLoss_SellekGrid, Sigma_min, Sigma_max
 
-
 def get_mask_StarUV(Mstar_value, UV_value, Mstar_Table, UV_Table):
     '''
     Construct a boolean mask that indicates rows of the FRIED Grid where Mstar_value and UV_value are present
@@ -126,8 +124,6 @@ def get_mask_StarUV(Mstar_value, UV_value, Mstar_Table, UV_Table):
     mask = mask_UV * mask_Mstar
 
     return mask
-
-
 
 def get_weights_StarUV(Mstar_value, UV_value, Mstar_lr, UV_lr):
 
@@ -145,7 +141,7 @@ def get_weights_StarUV(Mstar_value, UV_value, Mstar_lr, UV_lr):
     return f_weights
 
 
-def get_MassLoss_ResampleGrid(fried_filenames = ["FRIEDV2_0p1Msol_fPAH1p0_growth.dat", "FRIEDV2_0p3Msol_fPAH1p0_growth.dat", "FRIEDV2_0p6Msol_fPAH1p0_growth.dat", "FRIEDV2_1p0Msol_fPAH1p0_growth.dat", "FRIEDV2_1p5Msol_fPAH1p0_growth.dat", "FRIEDV2_3p0Msol_fPAH1p0_growth.dat"],
+def get_MassLoss_ResampleGrid(fried_dir, fried_filenames,
                               Mstar_target = 1., UV_target = 1000.,
                               grid_radii = None, grid_Sigma = None, grid_Sigma1AU = None):
     '''
@@ -177,7 +173,7 @@ def get_MassLoss_ResampleGrid(fried_filenames = ["FRIEDV2_0p1Msol_fPAH1p0_growth
 
     fried_grids=[]
     for name in fried_filenames:
-        grid = Table.read(name, format="ascii")
+        grid = Table.read(fried_dir+name, format="ascii")
         fried_grids.append(grid)
         
     FRIED_Grid = fried_grids[0]
@@ -270,13 +266,12 @@ def MassLoss_FRIED(sim):
 
     # Calls the interpolator hidden inside the FRIED class
     # This way it is not necessary to construct the interpolator every timestep, which is really time consuming
-    MassLoss = sim.FRIED._Interpolator(Sigma_1AU, r_AU)
+    MassLoss = sim.EPE.FRIED._Interpolator(Sigma_1AU, r_AU)
 
     # Convert to cgs
     MassLoss = np.power(10, MassLoss) * c.M_sun/c.year
 
     return MassLoss
-
 
 def LimitInRadius(sim):
     Sigma_gas_disc = sim.gas.Sigma
@@ -287,7 +282,6 @@ def LimitInRadius(sim):
     i_lim_in = np.where(mass_gas_cum > (0.9*mass_gas_tot))[0][0]
     return sim.grid.r[i_lim_in]
 
-
 def TruncationRadius(sim):
     '''
     Find the photoevaporative radii.
@@ -297,19 +291,18 @@ def TruncationRadius(sim):
     # Near the FRIED limit, the truncation radius is extremely sensitive to small variations in the MassLoss profile.
     # If the profile is completely constant, the truncation radius becomes the last grid cell
 
-    MassLoss = sim.FRIED.MassLoss * c.year / (2*np.pi)   #MassLossFRIED in g/s here <---
+    MassLoss = sim.EPE.FRIED.MassLoss * c.year / (2*np.pi)   #MassLossFRIED in g/s here <---
     # round to 10^-12 solar masses per year
     #MassLoss = np.round(MassLoss, 12)
 
     
     ir_ext = np.size(MassLoss) - np.argmax(MassLoss[::-1]) - 1
-    R_lim_in = sim.FRIED.rLim_in
+    R_lim_in = sim.EPE.FRIED.rLim_in
 
     if sim.grid.r[ir_ext] < R_lim_in:
         return R_lim_in
     else:
         return sim.grid.r[ir_ext]
-
 
 #####################################
 # GAS LOSS RATE
@@ -321,14 +314,14 @@ def SigmaDot_ExtPhoto(sim):
     '''
 
     # Mask the regions that should be subject to external photoevaporation
-    mask = sim.grid.r >= sim.FRIED.rTrunc
+    mask = sim.grid.r >= sim.EPE.FRIED.rTrunc
 
     # Obtain Mass at each radial ring and total mass outside the photoevaporative radius
     mass_profile = sim.grid.A * sim.gas.Sigma
     mass_ext = np.sum(mass_profile[mask])
 
     # Total mass loss rate.
-    mass_loss_ext = np.sum((sim.FRIED.MassLoss * mass_profile)[mask] / mass_ext)
+    mass_loss_ext = np.sum((sim.EPE.FRIED.MassLoss * mass_profile)[mask] / mass_ext)
 
     # Obtain the surface density profile using the mass of each ring as a weight factor
     # Remember to add the (-) sign to the surface density mass loss rate
@@ -341,7 +334,6 @@ def SigmaDot_ExtPhoto(sim):
 
     # return the surface density loss rate [g/cm²/s]
     return SigmaDot
-
 
 #####################################
 # DUST ENTRAINMENT AND LOSS RATE
@@ -362,7 +354,7 @@ def PhotoEntrainment_Size(sim):
     a_ent = v_th / (c.G * sim.star.M) * M_loss /(4 * np.pi * F * rhos)
     return a_ent
 
-def PhotoEntrainment_Fraction(sim):
+def PhotoEntrainment_Fraction(sim,a_ent):
     '''
     Returns fraction of dust grains that are entrained with the gas for each species at each location.
     * Must be multiplied by the dust-to-gas ratio to account for the mass fraction
@@ -370,16 +362,24 @@ def PhotoEntrainment_Fraction(sim):
     * In Sellek+2020 the mass fraction is used to account for the dust distribution as well, but in dustpy that information comes for free in the sim.dust.Sigma array
     * Currently this factor must be either 1 (entrained) or 0 (not entrained)
     '''
-
-    mask = sim.dust.a < sim.dust.Photo_Ent.a_ent[:, None] # Mask indicating which grains are entrained
+    mask = sim.dust.a < a_ent[:, None] # Mask indicating which grains are entrained
     f_ent = np.where(mask, 1., 0.)
     return f_ent
 
-
 def SigmaDot_ExtPhoto_Dust(sim):
-
-    f_ent = sim.dust.Photo_Ent.f_ent                                # Factor to mask the entrained grains.
+    sim.EPE.FRIED.update()
+    a_ent = PhotoEntrainment_Size(sim)
+    f_ent = PhotoEntrainment_Fraction(sim,a_ent)                    # Factor to mask the entrained grains.
     d2g_ratio = sim.dust.Sigma / sim.gas.Sigma[:, None]             # Dust-to-gas ratio profile for each dust species
     SigmaDot_Dust = f_ent * d2g_ratio * sim.gas.S.ext[:, None]      # Dust loss rate [g/cm²/s]
-
     return SigmaDot_Dust
+
+def S_gas_epe(sim):
+    S = SigmaDot_ExtPhoto(sim)
+    sim.gas.S.EPE = S
+    return S
+
+def S_dust_epe(sim):
+    S = SigmaDot_ExtPhoto_Dust(sim)
+    sim.dust.S.EPE = S
+    return S
