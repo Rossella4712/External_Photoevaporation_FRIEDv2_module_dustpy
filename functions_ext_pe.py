@@ -294,7 +294,6 @@ def TruncationRadius(sim):
     MassLoss = sim.EPE.FRIED.MassLoss * c.year / (2*np.pi)   #MassLossFRIED in g/s here <---
     # round to 10^-12 solar masses per year
     #MassLoss = np.round(MassLoss, 12)
-
     
     ir_ext = np.size(MassLoss) - np.argmax(MassLoss[::-1]) - 1
     R_lim_in = sim.EPE.FRIED.rLim_in
@@ -312,7 +311,7 @@ def SigmaDot_ExtPhoto(sim):
     '''
     Compute the Mass Loss Rate profile using Sellek+(2020) approach, using the mass loss rates from the FRIED grid of Haworth+(2018)
     '''
-
+    sim.EPE.FRIED.update()
     # Mask the regions that should be subject to external photoevaporation
     mask = sim.grid.r >= sim.EPE.FRIED.rTrunc
 
@@ -367,7 +366,6 @@ def PhotoEntrainment_Fraction(sim,a_ent):
     return f_ent
 
 def SigmaDot_ExtPhoto_Dust(sim):
-    sim.EPE.FRIED.update()
     a_ent = PhotoEntrainment_Size(sim)
     f_ent = PhotoEntrainment_Fraction(sim,a_ent)                    # Factor to mask the entrained grains.
     d2g_ratio = sim.dust.Sigma / sim.gas.Sigma[:, None]             # Dust-to-gas ratio profile for each dust species
