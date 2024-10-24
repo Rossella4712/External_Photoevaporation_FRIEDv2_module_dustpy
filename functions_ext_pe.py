@@ -325,11 +325,8 @@ def SigmaDot_ExtPhoto(sim):
     # Obtain the surface density profile using the mass of each ring as a weight factor
     # Remember to add the (-) sign to the surface density mass loss rate
 
-    if (sim.t/(c.year*1e6)) < 1. :
-        SigmaDot = np.zeros_like(sim.grid.r)
-    else :
-        SigmaDot = np.zeros_like(sim.grid.r)
-        SigmaDot[mask] = -sim.gas.Sigma[mask] *  mass_loss_ext / mass_ext
+    SigmaDot = np.zeros_like(sim.grid.r)
+    SigmaDot[mask] = -sim.gas.Sigma[mask] *  mass_loss_ext / mass_ext
 
     # return the surface density loss rate [g/cm²/s]
     return SigmaDot
@@ -348,7 +345,7 @@ def PhotoEntrainment_Size(sim):
     rhos = sim.dust.rhos[0,0]                               # Dust material density
 
     # Calculate the total mass loss rate (remember to add the (-) sign)
-    M_loss = -np.sum(sim.grid.A * sim.gas.S.ext)
+    M_loss = -np.sum(sim.grid.A * sim.gas.S.EPE)
 
     a_ent = v_th / (c.G * sim.star.M) * M_loss /(4 * np.pi * F * rhos)
     return a_ent
@@ -369,7 +366,7 @@ def SigmaDot_ExtPhoto_Dust(sim):
     a_ent = PhotoEntrainment_Size(sim)
     f_ent = PhotoEntrainment_Fraction(sim,a_ent)                    # Factor to mask the entrained grains.
     d2g_ratio = sim.dust.Sigma / sim.gas.Sigma[:, None]             # Dust-to-gas ratio profile for each dust species
-    SigmaDot_Dust = f_ent * d2g_ratio * sim.gas.S.ext[:, None]      # Dust loss rate [g/cm²/s]
+    SigmaDot_Dust = f_ent * d2g_ratio * sim.gas.S.EPE[:, None]      # Dust loss rate [g/cm²/s]
     return SigmaDot_Dust
 
 def S_gas_epe(sim):

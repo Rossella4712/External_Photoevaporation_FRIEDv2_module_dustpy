@@ -2,12 +2,17 @@ import numpy as np
 from dustpy import constants as c
 import os
 
-from functions_ext_pe import get_MassLoss_ResampleGrid
-from functions_ext_pe import MassLoss_FRIED, TruncationRadius, LimitInRadius
+from .functions_ext_pe import get_MassLoss_ResampleGrid
+from .functions_ext_pe import MassLoss_FRIED, TruncationRadius, LimitInRadius
 
 ################################################################################################
 # Helper routine to add external photoevaporation to your Simulation object in one line.
 ################################################################################################
+def param_ext_pe_FRIED(sim, UV_Flux = 1000.):
+    sim.addgroup('EPE', description = "external photoevaporation")
+    sim.EPE.addgroup('FRIED', description = "FRIED grid used to calculate mass loss rates due to external photoevaporation")
+    sim.EPE.FRIED.addfield('UV_Flux', UV_Flux, description = 'UV Flux [G_0]', constant=True)
+    return
 
 def setup_ext_pe_FRIED(sim, fried_dir = str(os.path.dirname(__file__))+"/FRIEDV2/",
                        fried_filenames = ["FRIEDV2_0p1Msol_fPAH1p0_growth.dat",
@@ -16,7 +21,7 @@ def setup_ext_pe_FRIED(sim, fried_dir = str(os.path.dirname(__file__))+"/FRIEDV2
                                                "FRIEDV2_1p0Msol_fPAH1p0_growth.dat",
                                                "FRIEDV2_1p5Msol_fPAH1p0_growth.dat",
                                                "FRIEDV2_3p0Msol_fPAH1p0_growth.dat"],
-                                               UV_Flux = 1000.,SigmaFloor = 1.e-6):
+                                               SigmaFloor = 1.e-100):
     '''
     Add external photoevaporation using the FRIED grid (Haworth et al., 2018) and the Sellek et al.(2020) implementation.
     This setup routine also performs the interpolation in the stellar mass and UV flux parameters.
@@ -49,11 +54,8 @@ def setup_ext_pe_FRIED(sim, fried_dir = str(os.path.dirname(__file__))+"/FRIEDV2
     # Obtain the mass loss grid.
     # Also obtain the interpolator(M400, r) function to include in the FRIED class as a hidden function
     grid_MassLoss, grid_MassLoss_Interpolator = get_MassLoss_ResampleGrid(fried_dir, fried_filenames,
-                                                        Mstar_target = sim.star.M[0]/c.M_sun, UV_target = UV_Flux,
+                                                        Mstar_target = sim.star.M/c.M_sun, UV_target = sim.EPE.FRIED.UV_Flux,
                                                         grid_radii = grid_radii, grid_Sigma = grid_Sigma, grid_Sigma1AU = grid_Sigma1AU)
-
-    sim.addgroup('EPE', description = "external photoevaporation")
-    sim.EPE.addgroup('FRIED', description = "FRIED grid used to calculate mass loss rates due to external photoevaporation")
     sim.EPE.FRIED.addgroup('Table', description = "(Resampled) Table of the mass loss rates for a given radial-Sigma grid.")
     sim.EPE.FRIED.Table.addfield("radii", grid_radii, description ="Outer disk radius input to calculate FRIED mass loss rates [AU], (array, nr)")
     sim.EPE.FRIED.Table.addfield("Sigma", grid_Sigma, description = "Surface density grid to calculate FRIED mass loss rates [g/cm^2] (array, nSigma)")
@@ -89,5 +91,4 @@ def setup_ext_pe_FRIED(sim, fried_dir = str(os.path.dirname(__file__))+"/FRIEDV2
     # This speeds the code significantly, while still reproducing the results from Sellek et al.(2020)
 
     sim.gas.SigmaFloor = SigmaFloor
-    
-    sim.update()
+    return
