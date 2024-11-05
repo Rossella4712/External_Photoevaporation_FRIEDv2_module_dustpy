@@ -6,4 +6,4 @@ setup_externalPhotoevaporation_FRIED(sim, fried_filename = "./FRIED_TABLES.dat",
 
 See the run_test.py code for an example.
 
-If you use this module, please cite Gárate et al. 2023, Anania et al. (in prep.)
+If you use this module, please cite Gárate et al. 2023, Anania et al. (subm., 2024)
