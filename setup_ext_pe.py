@@ -2,8 +2,8 @@ import numpy as np
 from dustpy import constants as c
 import os
 
-from .functions_ext_pe import get_MassLoss_ResampleGrid
-from .functions_ext_pe import MassLoss_FRIED, TruncationRadius, LimitInRadius
+from functions_ext_pe import get_MassLoss_ResampleGrid
+from functions_ext_pe import MassLoss_FRIED, TruncationRadius, LimitInRadius
 
 ################################################################################################
 # Helper routine to add external photoevaporation to your Simulation object in one line.
@@ -92,3 +92,57 @@ def setup_ext_pe_FRIED(sim, fried_dir = str(os.path.dirname(__file__))+"/FRIEDV2
 
     sim.gas.SigmaFloor = SigmaFloor
     return
+
+
+
+
+################################################################################################
+# Helper routine to add tracking of the dust lost through external photovaporation
+################################################################################################
+from simframe import Instruction
+from simframe import schemes
+
+def dSigma_lostdust(sim, x, Y):
+    # Routing to evolve the dust surface density of the lost dust
+    # This routine assumes that the dust is only lost through external photoevaporation
+    return -sim.dust.S.ext
+
+def M_lostdust(sim):
+    # Computes the mass of the lost dust
+    return (sim.grid.A * sim.lostdust.Sigma.sum(-1)).sum()
+
+
+def setup_lostdust(sim, using_FRIED = True):
+    '''
+    Adds the group "lostdust" to the simulation object.
+    This setup function is optional, and can used to track the total mass of dust removed by external sources
+    using_FRIED: Set to true if the FRIED grid is implemented as well.
+    '''
+
+    # Creates the lost dust group and track the surface density and the total mass
+    sim.addgroup("lostdust", description="Dust lost by photoevaporative entrainment")
+    sim.lostdust.addfield("Sigma", np.zeros_like(sim.dust.Sigma), description="Lost dust surface density [g/cm²]")
+    sim.lostdust.addfield("M", 0., description="Total mass of lost dust [photoevaporationg]")
+
+    # Add the mass updater to the group and add the group to the simulation updater
+    if using_FRIED:
+        sim.updater = ["star", "grid", 'FRIED', "gas", "dust", "lostdust"]
+    else:
+        sim.updater = ["star", "grid", "gas", "dust", "lostdust"]
+
+
+    sim.lostdust.updater = ["M"]
+
+    # Assign the time derivative of the lost dust
+    sim.lostdust.Sigma.differentiator = dSigma_lostdust
+    # Assign the updater to track the total mass of lost dust
+    sim.lostdust.M.updater = M_lostdust
+
+    # Add the instruction to actually integrate the lost dust evolution in time
+    inst_lostdust = Instruction(
+        schemes.expl_1_euler,
+        sim.lostdust.Sigma,
+        description="Lost dust: explicit 1st-order Euler method")
+    sim.integrator.instructions.append(inst_lostdust)
+
+    sim.update()
