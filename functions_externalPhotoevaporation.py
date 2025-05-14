@@ -332,12 +332,15 @@ def SigmaDot_ExtPhoto(sim):
 
     # Obtain the surface density profile using the mass of each ring as a weight factor
     # Remember to add the (-) sign to the surface density mass loss rate
+    SigmaDot = np.zeros_like(sim.grid.r)
+    SigmaDot[mask] = -sim.gas.Sigma[mask] *  mass_loss_ext / mass_ext
 
-    if (sim.t/(c.year*1e6)) < 1. :
-        SigmaDot = np.zeros_like(sim.grid.r)
-    else :
-        SigmaDot = np.zeros_like(sim.grid.r)
-        SigmaDot[mask] = -sim.gas.Sigma[mask] *  mass_loss_ext / mass_ext
+    # turning on ext photoevap after 1 Myr: in case you need to use this, comment the previous 2 lines and use the following
+    #if (sim.t/(c.year*1e6)) < 1. :
+    #    SigmaDot = np.zeros_like(sim.grid.r)
+    #else :
+    #    SigmaDot = np.zeros_like(sim.grid.r)
+    #    SigmaDot[mask] = -sim.gas.Sigma[mask] *  mass_loss_ext / mass_ext
 
     # return the surface density loss rate [g/cm²/s]
     return SigmaDot
