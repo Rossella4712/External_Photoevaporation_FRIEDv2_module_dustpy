@@ -266,7 +266,7 @@ def MassLoss_FRIED(sim):
 
     # Calls the interpolator hidden inside the FRIED class
     # This way it is not necessary to construct the interpolator every timestep, which is really time consuming
-    MassLoss = sim.EPE.FRIED._Interpolator(Sigma_1AU, r_AU)
+    MassLoss = sim.FRIED._Interpolator(Sigma_1AU, r_AU)
 
     # Convert to cgs
     MassLoss = np.power(10, MassLoss) * c.M_sun/c.year
@@ -291,12 +291,12 @@ def TruncationRadius(sim):
     # Near the FRIED limit, the truncation radius is extremely sensitive to small variations in the MassLoss profile.
     # If the profile is completely constant, the truncation radius becomes the last grid cell
 
-    MassLoss = sim.EPE.FRIED.MassLoss * c.year / (2*np.pi)   #MassLossFRIED in g/s here <---
+    MassLoss = sim.FRIED.MassLoss * c.year / (2*np.pi)   #MassLossFRIED in g/s here <---
     # round to 10^-12 solar masses per year
     #MassLoss = np.round(MassLoss, 12)
     
     ir_ext = np.size(MassLoss) - np.argmax(MassLoss[::-1]) - 1
-    R_lim_in = sim.EPE.FRIED.rLim_in
+    R_lim_in = sim.FRIED.rLim_in
 
     if sim.grid.r[ir_ext] < R_lim_in:
         return R_lim_in
@@ -311,16 +311,16 @@ def SigmaDot_ExtPhoto(sim):
     '''
     Compute the Mass Loss Rate profile using Sellek+(2020) approach, using the mass loss rates from the FRIED grid of Haworth+(2018)
     '''
-    sim.EPE.FRIED.update()
+    sim.FRIED.update()
     # Mask the regions that should be subject to external photoevaporation
-    mask = sim.grid.r >= sim.EPE.FRIED.rTrunc
+    mask = sim.grid.r >= sim.FRIED.rTrunc
 
     # Obtain Mass at each radial ring and total mass outside the photoevaporative radius
     mass_profile = sim.grid.A * sim.gas.Sigma
     mass_ext = np.sum(mass_profile[mask])
 
     # Total mass loss rate.
-    mass_loss_ext = np.sum((sim.EPE.FRIED.MassLoss * mass_profile)[mask] / mass_ext)
+    mass_loss_ext = np.sum((sim.FRIED.MassLoss * mass_profile)[mask] / mass_ext)
 
     # Obtain the surface density profile using the mass of each ring as a weight factor
     # Remember to add the (-) sign to the surface density mass loss rate
