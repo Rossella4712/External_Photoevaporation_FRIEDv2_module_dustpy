@@ -1,5 +1,5 @@
 import numpy as np
-from dustpy import constants as c
+import tripod.constants as c
 from scipy.interpolate import LinearNDInterpolator
 from astropy.table import Table, vstack
 
